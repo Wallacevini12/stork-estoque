@@ -179,9 +179,8 @@ def dashboard():
     cur.execute("SELECT COUNT(*) AS total FROM estoque_item WHERE quantidade <= estoque_min")
     alertas = cur.fetchone()["total"]
     cur.execute("""
-        SELECT m.tipo, COUNT(*) AS qtd
+        SELECT m.tipo, m.quantidade, m.criado_em
         FROM estoque_movimento m
-        GROUP BY m.tipo
         ORDER BY m.criado_em DESC
         LIMIT 30
     """)

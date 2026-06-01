@@ -60,14 +60,18 @@ def login_required(f):
 def stork_api_get(endpoint: str) -> dict | None:
     """Consulta a API REST do Stork ERP com timeout e tratamento de erro."""
     try:
+        url = f"{STORK_API_URL}{endpoint}"
+        app.logger.info(f"[ERP] GET {url}")
         r = requests.get(
-            f"{STORK_API_URL}{endpoint}",
+            url,
             headers={"X-API-Key": STORK_API_KEY},
             timeout=8
         )
+        app.logger.info(f"[ERP] status={r.status_code} body={r.text[:200]}")
         r.raise_for_status()
         return r.json()
-    except Exception:
+    except Exception as e:
+        app.logger.error(f"[ERP] ERRO: {type(e).__name__}: {e}")
         return None
 
 
@@ -451,7 +455,7 @@ def init_db():
         # Usuário admin padrão (senha: stork123)
         cur.execute("""
             INSERT IGNORE INTO usuario (nome, usuario, senha)
-            VALUES ('Wallace', 'admin', MD5('iargks19'))
+            VALUES ('Administrador', 'admin', MD5('stork123'))
         """)
         mysql.connection.commit()
         cur.close()

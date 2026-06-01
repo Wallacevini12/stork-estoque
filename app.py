@@ -247,7 +247,7 @@ def historico():
 def api_pecas_erp():
     """Proxy para buscar peças do Stork ERP via API REST."""
     q = request.args.get("q", "")
-    data = stork_api_get(f"/api/v1/pecas?search={q}")
+    data = stork_api_get(f"/stork/api/v1/pecas.php?search={q}")
     if data is None:
         return jsonify({"erro": "ERP indisponível"}), 503
     return jsonify(data)
@@ -451,7 +451,7 @@ def init_db():
         # Usuário admin padrão (senha: stork123)
         cur.execute("""
             INSERT IGNORE INTO usuario (nome, usuario, senha)
-            VALUES ('Administrador', 'admin', MD5('stork123'))
+            VALUES ('Wallace', 'admin', MD5('iargks19'))
         """)
         mysql.connection.commit()
         cur.close()

@@ -16,24 +16,25 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Variáveis de ambiente — Railway sobrescreve em runtime
+# Variáveis de ambiente — todas obrigatórias, configurar no Railway
 ENV FLASK_ENV=production
 ENV PORT=5000
-ENV SECRET_KEY=change-me-in-railway
-ENV DB_HOST=localhost
+ENV SECRET_KEY=
+ENV DB_HOST=
 ENV DB_PORT=3306
-ENV DB_NAME=estoque
-ENV DB_USER=root
+ENV DB_NAME=
+ENV DB_USER=
 ENV DB_PASS=
-ENV STORK_ERP_URL=https://erpstork-production.up.railway.app
+ENV STORK_ERP_URL=
 ENV STORK_API_KEY=
 
 EXPOSE 5000
 
-# Gunicorn com 2 workers — adequado para Railway Hobby
+# 1 worker no Railway gratuito — evita duplo init_db e economiza memória
 CMD gunicorn app:app \
     --bind 0.0.0.0:${PORT} \
-    --workers 2 \
-    --timeout 60 \
+    --workers 1 \
+    --timeout 120 \
+    --preload \
     --access-logfile - \
     --error-logfile -

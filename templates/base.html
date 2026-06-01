@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="theme-color" content="#00e5ff">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="/manifest.json">
+  <title>{% block title %}Stork Estoque{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/estoque.css">
+  {% block head %}{% endblock %}
+</head>
+<body>
+
+{% if session.usuario_id %}
+<nav class="navbar">
+  <a href="/" class="navbar-brand">
+    <span class="brand-mark">STORK</span>
+    <span class="brand-sub">Estoque</span>
+  </a>
+  <div class="navbar-actions">
+    <a href="/entrada"   class="nav-btn {% if request.path == '/entrada' %}active{% endif %}">Entrada</a>
+    <a href="/retirada"  class="nav-btn {% if request.path == '/retirada' %}active{% endif %}">Retirada</a>
+    <a href="/itens"     class="nav-btn {% if request.path == '/itens' %}active{% endif %}">Itens</a>
+    <a href="/historico" class="nav-btn {% if request.path == '/historico' %}active{% endif %}">Histórico</a>
+    <a href="/logout"    class="nav-btn nav-btn--logout">Sair</a>
+  </div>
+</nav>
+{% endif %}
+
+<main class="main-content">
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}
+      <div class="alert alert--{{ cat }}">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  {% block content %}{% endblock %}
+</main>
+
+<script>
+// Registra o Service Worker para PWA
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

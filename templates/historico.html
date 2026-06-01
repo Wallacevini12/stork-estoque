@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Histórico — Stork Estoque{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Histórico de movimentos</h1>
+  <p class="page-sub">Últimos 200 registros</p>
+</div>
+
+<div class="item-list">
+  {% for m in movimentos %}
+  <div class="item-row" style="justify-content:space-between">
+    <span class="item-codigo">{{ m.codigo_peca }}</span>
+    <div class="item-info">
+      <div class="item-nome">{{ m.nome_peca }}</div>
+      <div class="item-sub">{{ m.criado_em.strftime('%d/%m/%Y %H:%M') if m.criado_em else '' }}</div>
+    </div>
+    <span style="font-family:var(--mono);font-size:15px;
+                 color:{% if m.tipo == 'entrada' %}var(--success){% else %}var(--danger){% endif %};
+                 flex-shrink:0">
+      {% if m.tipo == 'entrada' %}+{% else %}−{% endif %}{{ m.quantidade }}
+    </span>
+  </div>
+  {% else %}
+  <p style="color:var(--text-sub);font-size:14px;padding:20px 0">
+    Nenhum movimento registrado ainda.
+  </p>
+  {% endfor %}
+</div>
+{% endblock %}

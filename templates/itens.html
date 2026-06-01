@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Itens — Stork Estoque{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Itens em estoque</h1>
+</div>
+
+<div class="table-search">
+  <input class="field-input" type="text" id="search-input"
+         placeholder="Buscar por código, nome ou cliente..."
+         value="{{ search }}" autocapitalize="characters">
+  <button class="btn btn--primary" id="btn-search">Buscar</button>
+</div>
+
+<div class="item-list">
+  {% for item in itens %}
+  <div class="item-row" style="justify-content:space-between">
+    <span class="item-codigo">{{ item.codigo_peca }}</span>
+    <div class="item-info">
+      <div class="item-nome">{{ item.nome_peca }}</div>
+      <div class="item-sub">{{ item.cliente or '—' }} · {{ item.local or 'sem local' }}</div>
+    </div>
+    <div class="item-qtd {% if item.quantidade <= item.estoque_min %}item-qtd--baixo{% endif %}">
+      {{ item.quantidade }}
+    </div>
+    <a href="/etiqueta/{{ item.id }}" target="_blank"
+       class="btn btn--ghost btn--sm" style="flex-shrink:0">Etiqueta</a>
+  </div>
+  {% else %}
+  <p style="color:var(--text-sub);font-size:14px;padding:20px 0">
+    Nenhum item encontrado.
+  </p>
+  {% endfor %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById("btn-search").addEventListener("click", () => {
+  const q = document.getElementById("search-input").value.trim();
+  window.location.href = `/itens?q=${encodeURIComponent(q)}`;
+});
+document.getElementById("search-input").addEventListener("keydown", e => {
+  if (e.key === "Enter") document.getElementById("btn-search").click();
+});
+</script>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Stork Estoque{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Estoque</h1>
+  <p class="page-sub">{{ session.usuario_nome }}</p>
+</div>
+
+<div class="kpi-grid">
+  <div class="kpi-card">
+    <div class="kpi-value">{{ total_itens }}</div>
+    <div class="kpi-label">itens cadastrados</div>
+  </div>
+  <div class="kpi-card {% if alertas > 0 %}kpi-card--alerta{% endif %}">
+    <div class="kpi-value">{{ alertas }}</div>
+    <div class="kpi-label">abaixo do mínimo</div>
+  </div>
+</div>
+
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:20px">
+  <a href="/entrada" class="btn btn--primary" style="height:56px;font-size:15px">
+    + Entrada
+  </a>
+  <a href="/retirada" class="btn btn--ghost" style="height:56px;font-size:15px">
+    − Retirada
+  </a>
+</div>
+
+<a href="/itens" class="btn btn--ghost btn--full" style="margin-bottom:8px">
+  Ver todos os itens
+</a>
+<a href="/historico" class="btn btn--ghost btn--full">
+  Histórico de movimentos
+</a>
+{% endblock %}

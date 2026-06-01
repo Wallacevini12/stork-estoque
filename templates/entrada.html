@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}Entrada — Stork Estoque{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Entrada de item</h1>
+  <p class="page-sub">Cadastre ou atualize um item no estoque</p>
+</div>
+
+<div class="card">
+  <!-- Busca de peça no Stork ERP -->
+  <div class="field">
+    <label class="field-label">Buscar peça no Stork ERP</label>
+    <div class="field-row">
+      <input class="field-input" type="text" id="busca-erp"
+             placeholder="Digite código ou nome..." autocapitalize="characters">
+      <button class="btn btn--ghost" id="btn-buscar-erp">Buscar</button>
+    </div>
+    <div id="erp-results" style="margin-top:8px"></div>
+  </div>
+
+  <hr style="border-color:var(--border); margin:16px 0">
+
+  <!-- Formulário manual -->
+  <div class="field">
+    <label class="field-label">Código da peça <span style="color:var(--danger)">*</span></label>
+    <input class="field-input" type="text" id="f-codigo"
+           placeholder="Ex: 1-900-017-521" autocapitalize="characters"
+           style="font-family:var(--mono)">
+  </div>
+
+  <div class="field">
+    <label class="field-label">Nome / descrição <span style="color:var(--danger)">*</span></label>
+    <input class="field-input" type="text" id="f-nome" placeholder="Descrição da peça">
+  </div>
+
+  <div class="field">
+    <label class="field-label">Cliente</label>
+    <input class="field-input" type="text" id="f-cliente" placeholder="Ex: BÜHLER">
+  </div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
+    <div class="field">
+      <label class="field-label">Quantidade <span style="color:var(--danger)">*</span></label>
+      <input class="field-input field-input--lg" type="number"
+             id="f-quantidade" min="1" placeholder="0" inputmode="numeric">
+    </div>
+    <div class="field">
+      <label class="field-label">Estoque mínimo</label>
+      <input class="field-input field-input--lg" type="number"
+             id="f-estoque-min" min="0" placeholder="0" inputmode="numeric">
+    </div>
+  </div>
+
+  <div class="field">
+    <label class="field-label">Local de armazenagem</label>
+    <input class="field-input" type="text" id="f-local"
+           placeholder="Ex: A3-P2 (corredor A3, prateleira 2)"
+           style="font-family:var(--mono)">
+  </div>
+
+  <div class="field">
+    <label class="field-label">Observação <span class="field-optional">(opcional)</span></label>
+    <input class="field-input" type="text" id="f-obs"
+           placeholder="Lote, nota fiscal, etc.">
+  </div>
+
+  <button class="btn btn--primary btn--full" id="btn-salvar">
+    Registrar entrada e gerar etiqueta
+  </button>
+</div>
+
+<div class="toast" id="toast"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Busca no ERP ──────────────────────────────────────────────
+document.getElementById("btn-buscar-erp").addEventListener("click", buscarErp);
+document.getElementById("busca-erp").addEventListener("keydown", e => {
+  if (e.key === "Enter") buscarErp();
+});
+
+async function buscarErp() {
+  const q = document.getElementById("busca-erp").value.trim();
+  if (!q) return;
+  const container = document.getElementById("erp-results");
+  container.innerHTML = '<p style="font-size:12px;color:var(--text-sub)">Buscando...</p>';
+
+  try {
+    const r = await fetch(`/api/pecas-erp?q=${encodeURIComponent(q)}`);
+    const data = await r.json();
+    if (data.erro) { container.innerHTML = `<p style="font-size:12px;color:var(--danger)">${data.erro}</p>`; return; }
+
+    const pecas = Array.isArray(data) ? data : (data.data || []);
+    if (!pecas.length) { container.innerHTML = '<p style="font-size:12px;color:var(--text-sub)">Nenhuma peça encontrada.</p>'; return; }
+
+    container.innerHTML = pecas.map(p => `
+      <div class="item-row" style="cursor:pointer;margin-bottom:6px" onclick="preencherForm(${JSON.stringify(p).replace(/"/g,'&quot;')})">
+        <span class="item-codigo">${p.codigo_peca}</span>
+        <div class="item-info">
+          <div class="item-nome">${p.nome_peca || p.nome || ''}</div>
+          <div class="item-sub">${p.cliente || ''}</div>
+        </div>
+      </div>
+    `).join("");
+  } catch {
+    container.innerHTML = '<p style="font-size:12px;color:var(--danger)">Erro ao consultar o ERP.</p>';
+  }
+}
+
+function preencherForm(p) {
+  document.getElementById("f-codigo").value  = p.codigo_peca || "";
+  document.getElementById("f-nome").value    = p.nome_peca || p.nome || "";
+  document.getElementById("f-cliente").value = p.cliente || "";
+  document.getElementById("erp-results").innerHTML = "";
+  document.getElementById("busca-erp").value = "";
+  document.getElementById("f-quantidade").focus();
+}
+
+// ── Salvar entrada ────────────────────────────────────────────
+document.getElementById("btn-salvar").addEventListener("click", async () => {
+  const codigo = document.getElementById("f-codigo").value.trim();
+  const nome   = document.getElementById("f-nome").value.trim();
+  const qtd    = parseInt(document.getElementById("f-quantidade").value);
+
+  if (!codigo) { toast("Informe o código da peça", "aviso"); return; }
+  if (!nome)   { toast("Informe o nome/descrição", "aviso"); return; }
+  if (!qtd || qtd <= 0) { toast("Informe uma quantidade válida", "aviso"); return; }
+
+  const btn = document.getElementById("btn-salvar");
+  btn.disabled = true;
+  btn.textContent = "Registrando...";
+
+  try {
+    const r = await fetch("/api/entrada", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        codigo_peca:  codigo,
+        nome_peca:    nome,
+        cliente:      document.getElementById("f-cliente").value.trim(),
+        quantidade:   qtd,
+        estoque_min:  parseInt(document.getElementById("f-estoque-min").value) || 0,
+        local:        document.getElementById("f-local").value.trim(),
+        observacao:   document.getElementById("f-obs").value.trim()
+      })
+    });
+    const data = await r.json();
+    if (data.erro) { toast(data.erro, "erro"); return; }
+
+    toast("Entrada registrada!", "ok");
+    // Abre a etiqueta em nova aba para impressão
+    setTimeout(() => window.open(`/etiqueta/${data.item_id}`, "_blank"), 600);
+    // Limpa o form
+    ["f-codigo","f-nome","f-cliente","f-quantidade","f-estoque-min","f-local","f-obs"]
+      .forEach(id => document.getElementById(id).value = "");
+
+  } catch {
+    toast("Erro de conexão", "erro");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Registrar entrada e gerar etiqueta";
+  }
+});
+
+function toast(msg, tipo = "ok") {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.className = `toast toast--${tipo} toast--show`;
+  setTimeout(() => el.classList.remove("toast--show"), 3000);
+}
+</script>
+{% endblock %}

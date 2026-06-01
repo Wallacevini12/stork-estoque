@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}Retirada — Stork Estoque{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Retirada de item</h1>
+  <p class="page-sub">Aponte a câmera para o código de barras da etiqueta</p>
+</div>
+
+<!-- Scanner de câmera -->
+<div class="scanner-card" id="scanner-section">
+  <div class="scanner-viewport" id="scanner-viewport">
+    <div id="scanner-interactive" class="scanner-interactive"></div>
+    <div class="scanner-reticle"></div>
+    <p class="scanner-hint" id="scanner-hint">Aguardando câmera...</p>
+  </div>
+  <div class="scanner-controls">
+    <button class="btn btn--primary" id="btn-iniciar-scan">Iniciar câmera</button>
+    <button class="btn btn--ghost" id="btn-manual">Digitar código</button>
+  </div>
+  <div class="field manual-field" id="manual-field" style="display:none">
+    <label class="field-label">Código da peça</label>
+    <div class="field-row">
+      <input class="field-input" type="text" id="codigo-manual"
+             placeholder="Ex: 1-900-017-521" autocapitalize="characters">
+      <button class="btn btn--primary" id="btn-buscar-manual">Buscar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Card de resultado (oculto até leitura) -->
+<div class="result-card" id="result-card" style="display:none">
+  <div class="result-header">
+    <span class="result-badge" id="result-codigo"></span>
+    <button class="btn btn--ghost btn--sm" id="btn-nova-leitura">Nova leitura</button>
+  </div>
+  <div class="result-info">
+    <div class="result-row">
+      <span class="result-label">Peça</span>
+      <span class="result-value" id="result-nome"></span>
+    </div>
+    <div class="result-row">
+      <span class="result-label">Cliente</span>
+      <span class="result-value" id="result-cliente"></span>
+    </div>
+    <div class="result-row">
+      <span class="result-label">Local</span>
+      <span class="result-value" id="result-local"></span>
+    </div>
+    <div class="result-row result-row--destaque">
+      <span class="result-label">Saldo atual</span>
+      <span class="result-value result-value--saldo" id="result-saldo"></span>
+    </div>
+  </div>
+
+  <div class="field">
+    <label class="field-label">Quantidade a retirar</label>
+    <input class="field-input field-input--lg" type="number"
+           id="qtd-retirada" min="1" placeholder="0" inputmode="numeric">
+  </div>
+  <div class="field">
+    <label class="field-label">Observação <span class="field-optional">(opcional)</span></label>
+    <input class="field-input" type="text" id="obs-retirada"
+           placeholder="OP, destino, etc.">
+  </div>
+
+  <button class="btn btn--danger btn--full" id="btn-confirmar">
+    Confirmar retirada
+  </button>
+</div>
+
+<!-- Toast de feedback -->
+<div class="toast" id="toast"></div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+<script>
+let scanAtivo = false;
+let itemAtual = null;
+
+const elScanner    = document.getElementById("scanner-interactive");
+const elHint       = document.getElementById("scanner-hint");
+const elResultCard = document.getElementById("result-card");
+const elScanSection = document.getElementById("scanner-section");
+
+// ── Iniciar câmera ────────────────────────────────────────────
+document.getElementById("btn-iniciar-scan").addEventListener("click", iniciarScan);
+
+function iniciarScan() {
+  Quagga.init({
+    inputStream: {
+      type: "LiveStream",
+      target: elScanner,
+      constraints: {
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        facingMode: "environment"
+      }
+    },
+    decoder: { readers: ["code_128_reader", "code_39_reader"] },
+    locate: true
+  }, err => {
+    if (err) {
+      elHint.textContent = "Câmera indisponível. Use digitação manual.";
+      return;
+    }
+    Quagga.start();
+    scanAtivo = true;
+    elHint.textContent = "Aponte para o código de barras";
+    document.getElementById("btn-iniciar-scan").textContent = "Parar câmera";
+    document.getElementById("btn-iniciar-scan").onclick = pararScan;
+  });
+
+  Quagga.onDetected(resultado => {
+    const codigo = resultado.codeResult.code;
+    if (!codigo) return;
+    pararScan();
+    buscarItem(codigo);
+  });
+}
+
+function pararScan() {
+  if (scanAtivo) { Quagga.stop(); scanAtivo = false; }
+  document.getElementById("btn-iniciar-scan").textContent = "Iniciar câmera";
+  document.getElementById("btn-iniciar-scan").onclick = iniciarScan;
+}
+
+// ── Digitação manual ─────────────────────────────────────────
+document.getElementById("btn-manual").addEventListener("click", () => {
+  const f = document.getElementById("manual-field");
+  f.style.display = f.style.display === "none" ? "block" : "none";
+});
+
+document.getElementById("btn-buscar-manual").addEventListener("click", () => {
+  const codigo = document.getElementById("codigo-manual").value.trim();
+  if (codigo) buscarItem(codigo);
+});
+
+// ── Buscar item na API ────────────────────────────────────────
+async function buscarItem(codigo) {
+  try {
+    const r = await fetch(`/api/item/${encodeURIComponent(codigo)}`);
+    if (r.status === 404) { toast("Peça não encontrada no estoque", "erro"); return; }
+    const item = await r.json();
+    itemAtual = item;
+    mostrarResultado(item);
+  } catch {
+    toast("Erro ao consultar o servidor", "erro");
+  }
+}
+
+function mostrarResultado(item) {
+  document.getElementById("result-codigo").textContent  = item.codigo_peca;
+  document.getElementById("result-nome").textContent    = item.nome_peca;
+  document.getElementById("result-cliente").textContent = item.cliente || "—";
+  document.getElementById("result-local").textContent   = item.local   || "—";
+  document.getElementById("result-saldo").textContent   = item.quantidade;
+  document.getElementById("qtd-retirada").value = "";
+  elScanSection.style.display = "none";
+  elResultCard.style.display  = "block";
+  document.getElementById("qtd-retirada").focus();
+}
+
+// ── Nova leitura ──────────────────────────────────────────────
+document.getElementById("btn-nova-leitura").addEventListener("click", () => {
+  elResultCard.style.display  = "none";
+  elScanSection.style.display = "block";
+  itemAtual = null;
+});
+
+// ── Confirmar retirada ────────────────────────────────────────
+document.getElementById("btn-confirmar").addEventListener("click", async () => {
+  if (!itemAtual) return;
+  const qtd = parseInt(document.getElementById("qtd-retirada").value);
+  if (!qtd || qtd <= 0) { toast("Informe uma quantidade válida", "aviso"); return; }
+
+  const btn = document.getElementById("btn-confirmar");
+  btn.disabled = true;
+  btn.textContent = "Registrando...";
+
+  try {
+    const r = await fetch("/api/retirada", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        codigo_peca: itemAtual.codigo_peca,
+        quantidade: qtd,
+        observacao: document.getElementById("obs-retirada").value
+      })
+    });
+    const data = await r.json();
+    if (data.erro) { toast(data.erro, "erro"); }
+    else {
+      toast(`Retirada de ${qtd} unidade(s) registrada!`, "ok");
+      setTimeout(() => {
+        elResultCard.style.display  = "none";
+        elScanSection.style.display = "block";
+        itemAtual = null;
+      }, 1500);
+    }
+  } catch {
+    toast("Erro de conexão", "erro");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Confirmar retirada";
+  }
+});
+
+// ── Toast ─────────────────────────────────────────────────────
+function toast(msg, tipo = "ok") {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.className = `toast toast--${tipo} toast--show`;
+  setTimeout(() => el.classList.remove("toast--show"), 3000);
+}
+</script>
+{% endblock %}

@@ -400,17 +400,8 @@ def manifest():
 
 @app.route("/sw.js")
 def service_worker():
-    """Service worker básico para instalação como PWA."""
-    sw = """
-const CACHE = 'stork-estoque-v1';
-const ASSETS = ['/', '/entrada', '/retirada', '/static/css/estoque.css'];
-self.addEventListener('install', e =>
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)))
-);
-self.addEventListener('fetch', e =>
-  e.respondWith(fetch(e.request).catch(() => caches.match(e.request)))
-);
-"""
+    """Service worker mínimo — habilita PWA sem cache agressivo."""
+    sw = "self.addEventListener('fetch', e => e.respondWith(fetch(e.request)));"
     from flask import Response
     return Response(sw, mimetype="application/javascript")
 

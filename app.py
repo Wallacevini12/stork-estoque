@@ -75,6 +75,23 @@ def stork_api_get(endpoint: str) -> dict | None:
         return None
 
 
+def stork_api_post(endpoint: str, payload: dict) -> dict | None:
+    """Envia POST para a API REST do Stork ERP."""
+    try:
+        r = requests.post(
+            f"{STORK_API_URL}{endpoint}",
+            json=payload,
+            headers={"X-API-Key": STORK_API_KEY, "Content-Type": "application/json"},
+            timeout=8
+        )
+        app.logger.info(f"[ERP POST] {endpoint} status={r.status_code} body={r.text[:200]}")
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        app.logger.error(f"[ERP POST] ERRO: {type(e).__name__}: {e}")
+        return None
+
+
 def gerar_barcode_png(codigo: str) -> bytes:
     """Gera PNG do Code128 em memória e retorna os bytes."""
     CODE128 = barcode.get_barcode_class("code128")
@@ -313,7 +330,16 @@ def api_entrada():
 
     mysql.connection.commit()
     cur.close()
-    return jsonify({"ok": True, "item_id": item_id})
+
+    # Sincroniza com o Stork ERP (não bloqueia em caso de falha)
+    erp_result = stork_api_post("/stork/api/v1/estoque.php", {
+        "codigo_peca": codigo,
+        "quantidade":  quantidade,
+        "tipo":        "entrada",
+        "observacao":  obs,
+    })
+    erp_ok = erp_result is not None and erp_result.get("ok")
+    return jsonify({"ok": True, "item_id": item_id, "erp_sincronizado": erp_ok})
 
 
 @app.route("/api/retirada", methods=["POST"])
@@ -354,7 +380,16 @@ def api_retirada():
 
     mysql.connection.commit()
     cur.close()
-    return jsonify({"ok": True})
+
+    # Sincroniza com o Stork ERP (não bloqueia em caso de falha)
+    erp_result = stork_api_post("/stork/api/v1/estoque.php", {
+        "codigo_peca": codigo,
+        "quantidade":  quantidade,
+        "tipo":        "saida",
+        "observacao":  obs,
+    })
+    erp_ok = erp_result is not None and erp_result.get("ok")
+    return jsonify({"ok": True, "erp_sincronizado": erp_ok})
 
 
 # ══════════════════════════════════════════════════════════════

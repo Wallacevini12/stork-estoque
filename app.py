@@ -274,6 +274,34 @@ def api_pecas_erp():
     return jsonify(data)
 
 
+@app.route("/api/itens-estoque")
+@login_required
+def api_itens_estoque():
+    """Busca itens com saldo > 0 no estoque local — usado na retirada manual."""
+    q = request.args.get("q", "").strip()
+    cur = mysql.connection.cursor()
+    if q:
+        cur.execute("""
+            SELECT codigo_peca, nome_peca, cliente, quantidade, local
+            FROM estoque_item
+            WHERE quantidade > 0
+              AND (codigo_peca LIKE %s OR nome_peca LIKE %s OR cliente LIKE %s)
+            ORDER BY codigo_peca
+            LIMIT 20
+        """, (f"%{q}%", f"%{q}%", f"%{q}%"))
+    else:
+        cur.execute("""
+            SELECT codigo_peca, nome_peca, cliente, quantidade, local
+            FROM estoque_item
+            WHERE quantidade > 0
+            ORDER BY codigo_peca
+            LIMIT 20
+        """)
+    rows = cur.fetchall()
+    cur.close()
+    return jsonify(rows)
+
+
 @app.route("/api/item/<codigo>")
 @login_required
 def api_item_por_codigo(codigo):

@@ -4,35 +4,38 @@
 {% block content %}
 <div class="page-header">
   <h1 class="page-title">Retirada de item</h1>
-  <p class="page-sub">Aponte a câmera para o código de barras da etiqueta</p>
+  <p class="page-sub">Aponte a câmera ou busque a peça pelo código</p>
 </div>
 
 <!-- Scanner de câmera -->
 <div class="scanner-card" id="scanner-section">
-  <div class="scanner-viewport" id="scanner-viewport">
+  <div class="scanner-viewport">
     <div id="scanner-interactive" class="scanner-interactive"></div>
     <div class="scanner-reticle"></div>
     <p class="scanner-hint" id="scanner-hint">Aguardando câmera...</p>
   </div>
   <div class="scanner-controls">
     <button class="btn btn--primary" id="btn-iniciar-scan">Iniciar câmera</button>
-    <button class="btn btn--ghost" id="btn-manual">Digitar código</button>
+    <button class="btn btn--ghost" id="btn-manual">Buscar por código</button>
   </div>
-  <div class="field manual-field" id="manual-field" style="display:none">
-    <label class="field-label">Código da peça</label>
-    <div class="field-row">
+
+  <!-- Campo de busca com dropdown -->
+  <div class="manual-field" id="manual-field" style="display:none">
+    <div class="field">
+      <label class="field-label">Buscar peça em estoque</label>
       <input class="field-input" type="text" id="codigo-manual"
-             placeholder="Ex: 1-900-017-521" autocapitalize="characters">
-      <button class="btn btn--primary" id="btn-buscar-manual">Buscar</button>
+             placeholder="Digite código, nome ou cliente..."
+             autocomplete="off" autocapitalize="characters">
     </div>
+    <div id="busca-results"></div>
   </div>
 </div>
 
-<!-- Card de resultado (oculto até leitura) -->
+<!-- Card de resultado -->
 <div class="result-card" id="result-card" style="display:none">
   <div class="result-header">
     <span class="result-badge" id="result-codigo"></span>
-    <button class="btn btn--ghost btn--sm" id="btn-nova-leitura">Nova leitura</button>
+    <button class="btn btn--ghost btn--sm" id="btn-nova-leitura">Nova busca</button>
   </div>
   <div class="result-info">
     <div class="result-row">
@@ -69,7 +72,6 @@
   </button>
 </div>
 
-<!-- Toast de feedback -->
 <div class="toast" id="toast"></div>
 {% endblock %}
 
@@ -78,13 +80,14 @@
 <script>
 let scanAtivo = false;
 let itemAtual = null;
+let buscaTimeout = null;
 
-const elScanner    = document.getElementById("scanner-interactive");
-const elHint       = document.getElementById("scanner-hint");
-const elResultCard = document.getElementById("result-card");
+const elScanner     = document.getElementById("scanner-interactive");
+const elHint        = document.getElementById("scanner-hint");
+const elResultCard  = document.getElementById("result-card");
 const elScanSection = document.getElementById("scanner-section");
 
-// ── Iniciar câmera ────────────────────────────────────────────
+// ── Câmera ────────────────────────────────────────────────────
 document.getElementById("btn-iniciar-scan").addEventListener("click", iniciarScan);
 
 function iniciarScan() {
@@ -92,19 +95,12 @@ function iniciarScan() {
     inputStream: {
       type: "LiveStream",
       target: elScanner,
-      constraints: {
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-        facingMode: "environment"
-      }
+      constraints: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "environment" }
     },
     decoder: { readers: ["code_128_reader", "code_39_reader"] },
     locate: true
   }, err => {
-    if (err) {
-      elHint.textContent = "Câmera indisponível. Use digitação manual.";
-      return;
-    }
+    if (err) { elHint.textContent = "Câmera indisponível."; return; }
     Quagga.start();
     scanAtivo = true;
     elHint.textContent = "Aponte para o código de barras";
@@ -116,7 +112,7 @@ function iniciarScan() {
     const codigo = resultado.codeResult.code;
     if (!codigo) return;
     pararScan();
-    buscarItem(codigo);
+    buscarItemPorCodigo(codigo);
   });
 }
 
@@ -126,19 +122,60 @@ function pararScan() {
   document.getElementById("btn-iniciar-scan").onclick = iniciarScan;
 }
 
-// ── Digitação manual ─────────────────────────────────────────
+// ── Busca manual com dropdown ─────────────────────────────────
 document.getElementById("btn-manual").addEventListener("click", () => {
   const f = document.getElementById("manual-field");
-  f.style.display = f.style.display === "none" ? "block" : "none";
+  const visivel = f.style.display !== "none";
+  f.style.display = visivel ? "none" : "block";
+  if (!visivel) {
+    document.getElementById("codigo-manual").focus();
+    carregarItens(""); // mostra todos ao abrir
+  }
 });
 
-document.getElementById("btn-buscar-manual").addEventListener("click", () => {
-  const codigo = document.getElementById("codigo-manual").value.trim();
-  if (codigo) buscarItem(codigo);
+document.getElementById("codigo-manual").addEventListener("input", e => {
+  clearTimeout(buscaTimeout);
+  buscaTimeout = setTimeout(() => carregarItens(e.target.value.trim()), 250);
 });
 
-// ── Buscar item na API ────────────────────────────────────────
-async function buscarItem(codigo) {
+async function carregarItens(q) {
+  const container = document.getElementById("busca-results");
+  try {
+    const r = await fetch(`/api/itens-estoque?q=${encodeURIComponent(q)}`);
+    const itens = await r.json();
+
+    if (!itens.length) {
+      container.innerHTML = '<p style="font-size:12px;color:var(--text-sub);padding:8px 0">Nenhuma peça em estoque encontrada.</p>';
+      return;
+    }
+
+    container.innerHTML = itens.map(i => `
+      <div class="item-row" style="cursor:pointer;margin-bottom:6px"
+           onclick="selecionarItem(${JSON.stringify(i).replace(/"/g, '&quot;')})">
+        <span class="item-codigo">${i.codigo_peca}</span>
+        <div class="item-info">
+          <div class="item-nome">${i.nome_peca}</div>
+          <div class="item-sub">${i.cliente || '—'} · ${i.local || 'sem local'}</div>
+        </div>
+        <div class="item-qtd ${i.quantidade <= 5 ? 'item-qtd--baixo' : ''}">${i.quantidade}</div>
+      </div>
+    `).join("");
+  } catch {
+    container.innerHTML = '<p style="font-size:12px;color:var(--danger);padding:8px 0">Erro ao buscar itens.</p>';
+  }
+}
+
+function selecionarItem(item) {
+  // Fecha a busca e abre o card de retirada
+  document.getElementById("manual-field").style.display = "none";
+  document.getElementById("codigo-manual").value = "";
+  document.getElementById("busca-results").innerHTML = "";
+  itemAtual = item;
+  mostrarResultado(item);
+}
+
+// ── Busca direta por código (câmera ou Enter) ─────────────────
+async function buscarItemPorCodigo(codigo) {
   try {
     const r = await fetch(`/api/item/${encodeURIComponent(codigo)}`);
     if (r.status === 404) { toast("Peça não encontrada no estoque", "erro"); return; }
@@ -162,7 +199,7 @@ function mostrarResultado(item) {
   document.getElementById("qtd-retirada").focus();
 }
 
-// ── Nova leitura ──────────────────────────────────────────────
+// ── Nova busca ────────────────────────────────────────────────
 document.getElementById("btn-nova-leitura").addEventListener("click", () => {
   elResultCard.style.display  = "none";
   elScanSection.style.display = "block";
@@ -185,8 +222,8 @@ document.getElementById("btn-confirmar").addEventListener("click", async () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         codigo_peca: itemAtual.codigo_peca,
-        quantidade: qtd,
-        observacao: document.getElementById("obs-retirada").value
+        quantidade:  qtd,
+        observacao:  document.getElementById("obs-retirada").value
       })
     });
     const data = await r.json();
